@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 
 const products = [
     {
@@ -41,36 +41,169 @@ const products = [
 ];
 
 export default function Home() {
+    const navigate = useNavigate();
     const [cart, setCart] = useState([]);
     const [isCartOpen, setIsCartOpen] = useState(false);
+    const [comandaId, setComandaId] = useState(null);
+    const [dbProducts, setDbProducts] = useState([]);
 
-    const addToCart = (product) => {
-        setCart(currentCart => {
-            const existingItem = currentCart.find(item => item.id === product.id);
-            if (existingItem) {
-                return currentCart.map(item =>
-                    item.id === product.id
-                        ? { ...item, quantity: item.quantity + 1 }
-                        : item
-                );
+    useEffect(() => {
+        const userId = localStorage.getItem('userId');
+        if (!userId) {
+            navigate('/login');
+            return;
+        }
+
+        const initData = async () => {
+            try {
+                // Obtenim els productes de la BD per saber els seus \`_id\` per quan afegim
+                const resProducts = await fetch('/api/products');
+                const productsData = await resProducts.json();
+                if (productsData.status === 'success') {
+                    setDbProducts(productsData.data);
+                }
+
+                // Recuperem comandes i detalls
+                const resComandes = await fetch('/api/comandes');
+                const comandesData = await resComandes.json();
+
+                if (comandesData.status === 'success') {
+                    // Troba LA PRIMERA comanda pendent de l'usuari actual
+                    const pendingComanda = comandesData.data.find(c =>
+                        c.estat === 'pendent' &&
+                        (c.usuari === userId || (c.usuari && c.usuari._id === userId))
+                    );
+
+                    if (pendingComanda) {
+                        setComandaId(pendingComanda._id);
+
+                        const resDetalls = await fetch('/api/detallscomanda');
+                        const detallsData = await resDetalls.json();
+
+                        if (detallsData.status === 'success') {
+                            const cartItems = detallsData.data
+                                .filter(d => d.comanda && (d.comanda._id === pendingComanda._id || d.comanda === pendingComanda._id))
+                                .map(d => {
+                                    // Assumint que el backend fa .populate('producte')
+                                    const prodNom = d.producte && d.producte.nom ? d.producte.nom : '';
+                                    const staticProduct = products.find(p => p.name === prodNom) || products[0];
+
+                                    return {
+                                        ...staticProduct,
+                                        quantity: d.quantitat,
+                                        detallId: d._id
+                                    };
+                                });
+                            setCart(cartItems);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error('Error recuperant la cistella', err);
             }
-            return [...currentCart, { ...product, quantity: 1 }];
-        });
+        };
+        initData();
+    }, [navigate]);
+
+    const addToCart = async (product) => {
         setIsCartOpen(true);
-    };
+        const userId = localStorage.getItem('userId');
 
-    const removeFromCart = (productId) => {
-        setCart(currentCart => currentCart.filter(item => item.id !== productId));
-    };
-
-    const updateQuantity = (productId, change) => {
-        setCart(currentCart => currentCart.map(item => {
-            if (item.id === productId) {
-                const newQuantity = item.quantity + change;
-                return newQuantity > 0 ? { ...item, quantity: newQuantity } : item;
+        try {
+            let currentComandaId = comandaId;
+            if (!currentComandaId) {
+                const orderRes = await fetch('/api/comandes', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ usuari: userId, import_total: 0, estat: 'pendent' })
+                });
+                const orderData = await orderRes.json();
+                if (orderData.status === 'success') {
+                    currentComandaId = orderData.data._id;
+                    setComandaId(currentComandaId);
+                }
             }
-            return item;
-        }));
+
+            const existingItem = cart.find(item => item.id === product.id);
+            if (existingItem) {
+                const newQuantity = existingItem.quantity + 1;
+                await fetch(`/api/detallscomanda/${existingItem.detallId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ quantitat: newQuantity })
+                });
+                setCart(cart => cart.map(item => item.id === product.id ? { ...item, quantity: newQuantity } : item));
+            } else {
+                // Busquem el producte a la base de dades que tingui el mateix nom
+                const bProd = dbProducts.find(bp => bp.nom === product.name);
+                const bProdId = bProd ? bProd._id : dbProducts[0]?._id;
+
+                if (!bProdId) return;
+
+                const detailRes = await fetch('/api/detallscomanda', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ comanda: currentComandaId, producte: bProdId, quantitat: 1 })
+                });
+                const detailData = await detailRes.json();
+                if (detailData.status === 'success') {
+                    setCart([...cart, { ...product, quantity: 1, detallId: detailData.data._id }]);
+                }
+            }
+        } catch (error) {
+            console.error('Error adding to cart', error);
+        }
+    };
+
+    const removeFromCart = async (productId) => {
+        try {
+            const item = cart.find(i => i.id === productId);
+            if (item && item.detallId) {
+                await fetch(`/api/detallscomanda/${item.detallId}`, { method: 'DELETE' });
+            }
+            setCart(cart => cart.filter(item => item.id !== productId));
+        } catch (error) {
+            console.error('Error removing from cart', error);
+        }
+    };
+
+    const updateQuantity = async (productId, change) => {
+        try {
+            const item = cart.find(i => i.id === productId);
+            if (!item) return;
+            const newQuantity = item.quantity + change;
+
+            if (newQuantity <= 0) {
+                await removeFromCart(productId);
+            } else {
+                await fetch(`/api/detallscomanda/${item.detallId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ quantitat: newQuantity })
+                });
+                setCart(cart => cart.map(i => i.id === productId ? { ...i, quantity: newQuantity } : i));
+            }
+        } catch (error) {
+            console.error('Error updating cart', error);
+        }
+    };
+
+    const handleCheckout = async () => {
+        if (!comandaId || cart.length === 0) return;
+        try {
+            await fetch(`/api/comandes/${comandaId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    estat: 'processant',
+                    import_total: cart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+                })
+            });
+            setCart([]);
+            setComandaId(null);
+            setIsCartOpen(false);
+            alert('Compra finalitzada amb èxit i guardada al backend!');
+        } catch (error) { }
     };
 
     const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
@@ -193,7 +326,10 @@ export default function Home() {
                                             <span>{totalPrice.toFixed(2)}€</span>
                                         </div>
                                     </div>
-                                    <button className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-blue-500/30 hover:bg-blue-700 transition-all transform hover:-translate-y-0.5 active:translate-y-0">
+                                    <button
+                                        onClick={handleCheckout}
+                                        className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-blue-500/30 hover:bg-blue-700 transition-all transform hover:-translate-y-0.5 active:translate-y-0"
+                                    >
                                         Finalitzar Compra
                                     </button>
                                 </div>

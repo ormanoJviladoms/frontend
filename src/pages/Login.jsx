@@ -1,7 +1,19 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 
 export default function Login() {
+    const navigate = useNavigate();
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+
+    const handleLogin = (e) => {
+        e.preventDefault();
+        // Mocking login logic, setting the seeded admin user's ID
+        localStorage.setItem('userId', '60d5ecb8b392d7001f111111');
+        localStorage.setItem('userEmail', email);
+        navigate('/');
+    };
+
     return (
         <div className="min-h-screen flex items-center justify-center bg-indigo-50 p-4">
             <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 transform transition-all hover:scale-[1.01]">
@@ -10,13 +22,16 @@ export default function Login() {
                     <p className="text-gray-500">Inicia sessió per continuar al teu compte</p>
                 </div>
 
-                <form className="space-y-6">
+                <form className="space-y-6" onSubmit={handleLogin}>
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                             Adreça electrònica
                         </label>
                         <input
                             type="email"
+                            required
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
                             placeholder="tu@exemple.com"
                             className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-600 focus:border-transparent outline-none transition-all"
                         />
@@ -28,6 +43,9 @@ export default function Login() {
                         </label>
                         <input
                             type="password"
+                            required
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
                             placeholder="••••••••"
                             className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-600 focus:border-transparent outline-none transition-all"
                         />
