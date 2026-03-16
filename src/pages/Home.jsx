@@ -327,7 +327,7 @@ export default function Home() {
                                         </div>
                                     </div>
                                     <button
-                                        onClick={handleCheckout}
+                                        onClick={() => navigate('/checkout')}
                                         className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-blue-500/30 hover:bg-blue-700 transition-all transform hover:-translate-y-0.5 active:translate-y-0"
                                     >
                                         Finalitzar Compra
