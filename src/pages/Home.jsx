@@ -84,12 +84,14 @@ export default function Home() {
                             const cartItems = detallsData.data
                                 .filter(d => d.comanda && (d.comanda._id === pendingComanda._id || d.comanda === pendingComanda._id))
                                 .map(d => {
-                                    // Assumint que el backend fa .populate('producte')
-                                    const prodNom = d.producte && d.producte.nom ? d.producte.nom : '';
-                                    const staticProduct = products.find(p => p.name === prodNom) || products[0];
+                                    const nom = d.nom_producte || (d.producte ? d.producte.nom : '');
+                                    const preu = d.preu_unitari || (d.producte ? d.producte.preu : 0);
+                                    const staticProduct = products.find(p => p.name === nom) || products[0];
 
                                     return {
                                         ...staticProduct,
+                                        name: nom || staticProduct.name,
+                                        price: preu || staticProduct.price,
                                         quantity: d.quantitat,
                                         detallId: d._id
                                     };
@@ -216,12 +218,19 @@ export default function Home() {
                 <div className="container mx-auto px-6 py-4 flex justify-between items-center">
                     <h1 className="text-2xl font-black text-blue-600 tracking-tighter">TRUE FACTS</h1>
                     <div className="flex items-center space-x-6">
-                        <Link to="/login" className="text-gray-600 hover:text-blue-600 font-medium transition-colors hidden sm:block">
-                            Iniciar sessió
-                        </Link>
-                        <Link to="/register" className="bg-blue-600 text-white px-5 py-2 rounded-full font-medium hover:bg-blue-700 transition-all shadow-md hover:shadow-lg hidden sm:block">
-                            Registre
-                        </Link>
+                        {!localStorage.getItem('userId') ? (
+                            <>
+                                <Link to="/login" className="text-gray-600 hover:text-blue-600 font-medium transition-colors hidden sm:block">
+                                    Iniciar sessió
+                                </Link>
+                                <Link to="/register" className="bg-blue-600 text-white px-5 py-2 rounded-full font-medium hover:bg-blue-700 transition-all shadow-md hover:shadow-lg hidden sm:block">
+                                    Registre
+                                </Link> </>
+                        ) :
+                            <Link to="/" className="text-gray-600 hover:text-blue-600 font-medium transition-colors hidden sm:block">
+                                Hola {localStorage.getItem('userEmail')}
+                            </Link>
+                        }
 
                         {/* Cart Button */}
                         <button

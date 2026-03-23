@@ -61,12 +61,16 @@ export default function Checkout() {
                     if (detallsData.status === 'success') {
                         const cartItems = detallsData.data
                             .filter(d => d.comanda && (d.comanda._id === pendingComanda._id || d.comanda === pendingComanda._id))
-                            .map(d => ({
-                                producte: d.producte?.nom || 'Producte',
-                                quantitat: d.quantitat,
-                                preu: d.producte?.preu || 0,
-                                image: getProductImage(d.producte?.nom),
-                            }));
+                            .map(d => {
+                                const nom = d.nom_producte || (d.producte ? d.producte.nom : 'Producte desconegut');
+                                const preu = d.preu_unitari || (d.producte ? d.producte.preu : 0);
+                                return {
+                                    producte: nom,
+                                    quantitat: d.quantitat,
+                                    preu: preu,
+                                    image: getProductImage(nom),
+                                };
+                            });
                         setCart(cartItems);
 
                         if (cartItems.length === 0) {
