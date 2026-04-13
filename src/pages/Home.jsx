@@ -1,123 +1,135 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-
-const products = [
-    {
-        id: 1,
-        name: 'Samarreta True Facts Basic',
-        price: 19.99,
-        image: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=60',
-    },
-    {
-        id: 2,
-        name: 'Edició Limitada Estiu',
-        price: 24.99,
-        image: 'https://images.unsplash.com/photo-1581655353564-df123a1eb820?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=60',
-    },
-    {
-        id: 3,
-        name: 'True Facts Vintage',
-        price: 29.99,
-        image: 'https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=60',
-    },
-    {
-        id: 4,
-        name: 'Samarreta Gràfica',
-        price: 22.99,
-        image: 'https://images.unsplash.com/photo-1576566588028-4147f3842f27?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=60',
-    },
-    {
-        id: 5,
-        name: 'Col·lecció Urbana',
-        price: 27.99,
-        image: 'https://images.unsplash.com/photo-1562157873-818bc0726f68?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=60',
-    },
-    {
-        id: 6,
-        name: 'True Facts Premium',
-        price: 34.99,
-        image: 'https://images.unsplash.com/photo-1503341455253-b2e72333dbdb?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=60',
-    }
-];
+import { useAuth } from '../context/AuthContext';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+    ShoppingBag,
+    LogOut,
+    X,
+    Plus,
+    Minus,
+    Trash2,
+    ArrowRight,
+    Star,
+    CheckCircle2,
+    Loader2
+} from 'lucide-react';
 
 export default function Home() {
     const navigate = useNavigate();
+    const { user, logout, loading: authLoading } = useAuth();
     const [cart, setCart] = useState([]);
     const [isCartOpen, setIsCartOpen] = useState(false);
     const [comandaId, setComandaId] = useState(null);
     const [dbProducts, setDbProducts] = useState([]);
+    const [isLoadingProducts, setIsLoadingProducts] = useState(true);
+    const [isNavScrolled, setIsNavScrolled] = useState(false);
 
     useEffect(() => {
-        const userId = localStorage.getItem('userId');
-        if (!userId) {
+        const handleScroll = () => setIsNavScrolled(window.scrollY > 50);
+        window.addEventListener('scroll', handleScroll);
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, []);
+
+    const fetchCart = async (userId, productsList) => {
+        try {
+            const token = localStorage.getItem('accessToken');
+            const resComandes = await fetch('/api/comandes', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const comandesData = await resComandes.json();
+
+            if (comandesData.status === 'success') {
+                const pendingComanda = comandesData.data.find(c =>
+                    c.estat === 'pendent' &&
+                    (c.usuari === userId || (c.usuari && c.usuari._id === userId))
+                );
+
+                if (pendingComanda) {
+                    setComandaId(pendingComanda._id);
+                    const resDetalls = await fetch('/api/detallscomanda', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    const detallsData = await resDetalls.json();
+
+                    if (detallsData.status === 'success') {
+                        const cartItems = detallsData.data
+                            .filter(d => d.comanda && (d.comanda._id === pendingComanda._id || d.comanda === pendingComanda._id))
+                            .map(d => {
+                                const prodId = d.producte && (d.producte._id || d.producte);
+                                const dbProd = productsList.find(p => p._id === prodId);
+
+                                return {
+                                    _id: prodId,
+                                    name: d.nom_producte || (dbProd ? dbProd.nom : ''),
+                                    price: d.preu_unitari || (dbProd ? dbProd.preu : 0),
+                                    image: dbProd ? dbProd.imatge : '',
+                                    quantity: d.quantitat,
+                                    detallId: d._id
+                                };
+                            });
+                        setCart(cartItems);
+                    }
+                }
+            }
+        } catch (err) {
+            console.error('Error recuperant la cistella', err);
+        }
+    };
+
+    useEffect(() => {
+        if (!authLoading && !user) {
             navigate('/login');
             return;
         }
 
-        const initData = async () => {
-            try {
-                // Obtenim els productes de la BD per saber els seus \`_id\` per quan afegim
-                const resProducts = await fetch('/api/products');
-                const productsData = await resProducts.json();
-                if (productsData.status === 'success') {
-                    setDbProducts(productsData.data);
-                }
-
-                // Recuperem comandes i detalls
-                const resComandes = await fetch('/api/comandes');
-                const comandesData = await resComandes.json();
-
-                if (comandesData.status === 'success') {
-                    // Troba LA PRIMERA comanda pendent de l'usuari actual
-                    const pendingComanda = comandesData.data.find(c =>
-                        c.estat === 'pendent' &&
-                        (c.usuari === userId || (c.usuari && c.usuari._id === userId))
-                    );
-
-                    if (pendingComanda) {
-                        setComandaId(pendingComanda._id);
-
-                        const resDetalls = await fetch('/api/detallscomanda');
-                        const detallsData = await resDetalls.json();
-
-                        if (detallsData.status === 'success') {
-                            const cartItems = detallsData.data
-                                .filter(d => d.comanda && (d.comanda._id === pendingComanda._id || d.comanda === pendingComanda._id))
-                                .map(d => {
-                                    const nom = d.nom_producte || (d.producte ? d.producte.nom : '');
-                                    const preu = d.preu_unitari || (d.producte ? d.producte.preu : 0);
-                                    const staticProduct = products.find(p => p.name === nom) || products[0];
-
-                                    return {
-                                        ...staticProduct,
-                                        name: nom || staticProduct.name,
-                                        price: preu || staticProduct.price,
-                                        quantity: d.quantitat,
-                                        detallId: d._id
-                                    };
-                                });
-                            setCart(cartItems);
-                        }
+        if (user) {
+            const loadContent = async () => {
+                setIsLoadingProducts(true);
+                try {
+                    const token = localStorage.getItem('accessToken');
+                    const resProducts = await fetch('/api/products', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    const productsData = await resProducts.json();
+                    let productsList = [];
+                    if (productsData.status === 'success') {
+                        setDbProducts(productsData.data);
+                        productsList = productsData.data;
                     }
+
+                    await fetchCart(user._id, productsList);
+                } catch (err) {
+                    console.error('Error carregant contingut', err);
+                } finally {
+                    setIsLoadingProducts(false);
                 }
-            } catch (err) {
-                console.error('Error recuperant la cistella', err);
-            }
-        };
-        initData();
-    }, [navigate]);
+            };
+            loadContent();
+        }
+    }, [user, authLoading, navigate]);
+
+    if (authLoading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-brand-dark">
+                <Loader2 className="w-12 h-12 text-brand-blue animate-spin" />
+            </div>
+        );
+    }
 
     const addToCart = async (product) => {
         setIsCartOpen(true);
-        const userId = localStorage.getItem('userId');
-
         try {
+            const token = localStorage.getItem('accessToken');
             let currentComandaId = comandaId;
             if (!currentComandaId) {
                 const orderRes = await fetch('/api/comandes', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ usuari: userId, import_total: 0, estat: 'pendent' })
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ usuari: user._id, import_total: 0, estat: 'pendent' })
                 });
                 const orderData = await orderRes.json();
                 if (orderData.status === 'success') {
@@ -126,30 +138,41 @@ export default function Home() {
                 }
             }
 
-            const existingItem = cart.find(item => item.id === product.id);
+            const existingItem = cart.find(item => item._id === product._id);
             if (existingItem) {
                 const newQuantity = existingItem.quantity + 1;
                 await fetch(`/api/detallscomanda/${existingItem.detallId}`, {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
                     body: JSON.stringify({ quantitat: newQuantity })
                 });
-                setCart(cart => cart.map(item => item.id === product.id ? { ...item, quantity: newQuantity } : item));
+                setCart(cart.map(item => item._id === product._id ? { ...item, quantity: newQuantity } : item));
             } else {
-                // Busquem el producte a la base de dades que tingui el mateix nom
-                const bProd = dbProducts.find(bp => bp.nom === product.name);
-                const bProdId = bProd ? bProd._id : dbProducts[0]?._id;
-
-                if (!bProdId) return;
-
                 const detailRes = await fetch('/api/detallscomanda', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ comanda: currentComandaId, producte: bProdId, quantitat: 1 })
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        comanda: currentComandaId,
+                        producte: product._id,
+                        quantitat: 1
+                    })
                 });
                 const detailData = await detailRes.json();
                 if (detailData.status === 'success') {
-                    setCart([...cart, { ...product, quantity: 1, detallId: detailData.data._id }]);
+                    setCart([...cart, {
+                        _id: product._id,
+                        name: product.nom,
+                        price: product.preu,
+                        image: product.imatge,
+                        quantity: 1,
+                        detallId: detailData.data._id
+                    }]);
                 }
             }
         } catch (error) {
@@ -157,160 +180,151 @@ export default function Home() {
         }
     };
 
-    const removeFromCart = async (productId) => {
+    const removeFromCart = async (detallId) => {
         try {
-            const item = cart.find(i => i.id === productId);
-            if (item && item.detallId) {
-                await fetch(`/api/detallscomanda/${item.detallId}`, { method: 'DELETE' });
-            }
-            setCart(cart => cart.filter(item => item.id !== productId));
+            const token = localStorage.getItem('accessToken');
+            await fetch(`/api/detallscomanda/${detallId}`, { 
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            setCart(cart.filter(item => item.detallId !== detallId));
         } catch (error) {
             console.error('Error removing from cart', error);
         }
     };
 
-    const updateQuantity = async (productId, change) => {
+    const updateQuantity = async (detallId, change) => {
         try {
-            const item = cart.find(i => i.id === productId);
+            const item = cart.find(i => i.detallId === detallId);
             if (!item) return;
             const newQuantity = item.quantity + change;
 
             if (newQuantity <= 0) {
-                await removeFromCart(productId);
+                await removeFromCart(detallId);
             } else {
-                await fetch(`/api/detallscomanda/${item.detallId}`, {
+                const token = localStorage.getItem('accessToken');
+                await fetch(`/api/detallscomanda/${detallId}`, {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
                     body: JSON.stringify({ quantitat: newQuantity })
                 });
-                setCart(cart => cart.map(i => i.id === productId ? { ...i, quantity: newQuantity } : i));
+                setCart(cart.map(i => i.detallId === detallId ? { ...i, quantity: newQuantity } : i));
             }
         } catch (error) {
             console.error('Error updating cart', error);
         }
     };
 
-    const handleCheckout = async () => {
-        if (!comandaId || cart.length === 0) return;
-        try {
-            await fetch(`/api/comandes/${comandaId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    estat: 'processant',
-                    import_total: cart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
-                })
-            });
-            setCart([]);
-            setComandaId(null);
-            setIsCartOpen(false);
-            alert('Compra finalitzada amb èxit i guardada al backend!');
-        } catch (error) { }
-    };
-
     const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
     const totalPrice = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
     return (
-        <div className="min-h-screen bg-gray-50 font-sans relative">
-            {/* Navbar Simple */}
-            <nav className="bg-white shadow-sm sticky top-0 z-40">
-                <div className="container mx-auto px-6 py-4 flex justify-between items-center">
-                    <h1 className="text-2xl font-black text-blue-600 tracking-tighter">TRUE FACTS</h1>
-                    <div className="flex items-center space-x-6">
-                        {!localStorage.getItem('userId') ? (
-                            <>
-                                <Link to="/login" className="text-gray-600 hover:text-blue-600 font-medium transition-colors hidden sm:block">
-                                    Iniciar sessió
-                                </Link>
-                                <Link to="/register" className="bg-blue-600 text-white px-5 py-2 rounded-full font-medium hover:bg-blue-700 transition-all shadow-md hover:shadow-lg hidden sm:block">
-                                    Registre
-                                </Link> </>
-                        ) :
-                            <Link to="/" className="text-gray-600 hover:text-blue-600 font-medium transition-colors hidden sm:block">
-                                Hola {localStorage.getItem('userEmail')}
-                            </Link>
-                        }
+        <div className="min-h-screen bg-slate-50 font-sans">
+            {/* Mega Navbar */}
+            <nav className={`fixed top-0 w-full z-50 transition-all duration-500 ${isNavScrolled ? 'glass py-3' : 'bg-transparent py-6'}`}>
+                <div className="container mx-auto px-6 flex justify-between items-center">
+                    <motion.div
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        className="flex items-center gap-3"
+                    >
+                        <div className="w-10 h-10 bg-brand-dark rounded-xl flex items-center justify-center">
+                            <Star className="text-white w-6 h-6 fill-current" />
+                        </div>
+                        <h1 className="text-2xl font-black tracking-tighter text-brand-dark">TRUE FACTS</h1>
+                    </motion.div>
 
-                        {/* Cart Button */}
-                        <button
-                            onClick={() => setIsCartOpen(true)}
-                            className="relative p-2 text-gray-600 hover:text-blue-600 transition-colors"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-                            </svg>
-                            {totalItems > 0 && (
-                                <span className="absolute top-0 right-0 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center transform translate-x-1 -translate-y-1">
-                                    {totalItems}
-                                </span>
-                            )}
-                        </button>
+                    <div className="flex items-center space-x-8">
+                        <div className="hidden md:flex space-x-8 text-sm font-bold uppercase tracking-widest text-slate-600">
+                            <a href="#" className="hover:text-brand-blue transition-colors">Shop</a>
+                            <a href="#" className="hover:text-brand-blue transition-colors">Collections</a>
+                            <a href="#" className="hover:text-brand-blue transition-colors">Our Story</a>
+                        </div>
+
+                        <div className="flex items-center space-x-4 border-l pl-8 border-slate-200">
+                            <button
+                                onClick={() => setIsCartOpen(true)}
+                                className="relative p-2 text-slate-700 hover:text-brand-blue transition-colors"
+                            >
+                                <ShoppingBag className="w-6 h-6" />
+                                {totalItems > 0 && (
+                                    <motion.span
+                                        initial={{ scale: 0 }}
+                                        animate={{ scale: 1 }}
+                                        className="absolute -top-1 -right-1 bg-brand-blue text-white text-[10px] font-bold rounded-full h-5 w-5 flex items-center justify-center"
+                                    >
+                                        {totalItems}
+                                    </motion.span>
+                                )}
+                            </button>
+
+                            <div className="flex items-center gap-4">
+                                <span className="text-sm font-bold text-slate-500 hidden lg:block">Hola, {user?.nom || 'Usuari'}</span>
+                                <button
+                                    onClick={logout}
+                                    className="p-2 text-slate-700 hover:text-red-500 transition-colors"
+                                    title="Tancar sessió"
+                                >
+                                    <LogOut className="w-6 h-6" />
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </nav>
 
-            {/* Cart Sidebar */}
-            {isCartOpen && (
-                <div className="fixed inset-0 z-50 overflow-hidden">
-                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity" onClick={() => setIsCartOpen(false)}></div>
-                    <div className="absolute inset-y-0 right-0 max-w-md w-full flex">
-                        <div className="w-full h-full bg-white shadow-2xl flex flex-col transform transition-transform animate-slide-in-right">
-                            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                                <h2 className="text-xl font-bold text-gray-900">La teva Cistella</h2>
-                                <button onClick={() => setIsCartOpen(false)} className="text-gray-400 hover:text-gray-600 p-2 rounded-full hover:bg-gray-200 transition-all">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
+            {/* Sidebar Cart logic */}
+            <AnimatePresence>
+                {isCartOpen && (
+                    <>
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setIsCartOpen(false)}
+                            className="fixed inset-0 bg-brand-dark/40 backdrop-blur-sm z-[60]"
+                        />
+                        <motion.div
+                            initial={{ x: '100%' }}
+                            animate={{ x: 0 }}
+                            exit={{ x: '100%' }}
+                            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                            className="fixed top-0 right-0 h-full w-full max-w-md bg-white z-[70] shadow-2xl flex flex-col"
+                        >
+                            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                                <h2 className="text-xl font-black text-brand-dark uppercase tracking-wide">La teva Selecció</h2>
+                                <button onClick={() => setIsCartOpen(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
+                                    <X className="w-6 h-6 text-slate-500" />
                                 </button>
                             </div>
 
                             <div className="flex-1 overflow-y-auto p-6 space-y-6">
                                 {cart.length === 0 ? (
-                                    <div className="h-full flex flex-col items-center justify-center text-gray-500 space-y-4">
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-                                        </svg>
-                                        <p className="text-lg font-medium">La cistella és buida</p>
-                                        <button onClick={() => setIsCartOpen(false)} className="text-blue-600 font-bold hover:underline">
-                                            Començar a comprar
-                                        </button>
+                                    <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-4">
+                                        <ShoppingBag size={64} strokeWidth={1} className="opacity-20" />
+                                        <p className="text-lg font-medium">Cistella buida</p>
                                     </div>
                                 ) : (
                                     cart.map(item => (
-                                        <div key={item.id} className="flex gap-4 p-4 bg-white border border-gray-100 rounded-xl shadow-sm hover:shadow-md transition-shadow">
-                                            <div className="w-20 h-20 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
-                                                <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                                        <div key={item.detallId} className="flex gap-4 group">
+                                            <div className="w-24 h-24 bg-slate-100 rounded-2xl overflow-hidden flex-shrink-0">
+                                                <img src={item.image} alt={item.name} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
                                             </div>
-                                            <div className="flex-1 flex flex-col justify-between">
-                                                <div>
-                                                    <div className="flex justify-between items-start">
-                                                        <h3 className="font-bold text-gray-900 line-clamp-1">{item.name}</h3>
-                                                        <button
-                                                            onClick={() => removeFromCart(item.id)}
-                                                            className="text-gray-400 hover:text-red-500 transition-colors p-1"
-                                                        >
-                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                            </svg>
-                                                        </button>
-                                                    </div>
-                                                    <p className="text-blue-600 font-bold mt-1">{item.price.toFixed(2)}€</p>
+                                            <div className="flex-1 flex flex-col py-1">
+                                                <div className="flex justify-between items-start">
+                                                    <h3 className="font-bold text-slate-900 group-hover:text-brand-blue transition-colors line-clamp-1">{item.name}</h3>
+                                                    <button onClick={() => removeFromCart(item.detallId)} className="text-slate-300 hover:text-red-500 transition-colors">
+                                                        <Trash2 size={16} />
+                                                    </button>
                                                 </div>
-                                                <div className="flex items-center gap-3 bg-gray-50 w-max rounded-lg p-1 mt-2">
-                                                    <button
-                                                        onClick={() => updateQuantity(item.id, -1)}
-                                                        className="w-6 h-6 flex items-center justify-center bg-white rounded shadow-sm text-gray-600 hover:text-blue-600 hover:bg-blue-50 transition-all font-bold"
-                                                    >
-                                                        -
-                                                    </button>
-                                                    <span className="text-sm font-bold w-4 text-center">{item.quantity}</span>
-                                                    <button
-                                                        onClick={() => updateQuantity(item.id, 1)}
-                                                        className="w-6 h-6 flex items-center justify-center bg-white rounded shadow-sm text-gray-600 hover:text-blue-600 hover:bg-blue-50 transition-all font-bold"
-                                                    >
-                                                        +
-                                                    </button>
+                                                <p className="text-sm font-bold text-slate-400 mt-1">{item.price.toFixed(2)}€</p>
+                                                <div className="flex items-center gap-3 bg-slate-100 w-max rounded-xl px-2 py-1 mt-auto scale-90 -ml-2">
+                                                    <button onClick={() => updateQuantity(item.detallId, -1)} className="hover:text-brand-blue"><Minus size={14} /></button>
+                                                    <span className="text-xs font-black w-4 text-center">{item.quantity}</span>
+                                                    <button onClick={() => updateQuantity(item.detallId, 1)} className="hover:text-brand-blue"><Plus size={14} /></button>
                                                 </div>
                                             </div>
                                         </div>
@@ -319,90 +333,190 @@ export default function Home() {
                             </div>
 
                             {cart.length > 0 && (
-                                <div className="p-6 bg-white border-t border-gray-100 shadow-negative">
-                                    <div className="space-y-3 mb-6">
-                                        <div className="flex justify-between text-gray-500">
+                                <div className="p-8 bg-slate-50 border-t border-slate-100 space-y-6">
+                                    <div className="space-y-2">
+                                        <div className="flex justify-between text-slate-500 font-medium">
                                             <span>Subtotal</span>
-                                            <span className="font-medium">{totalPrice.toFixed(2)}€</span>
+                                            <span>{totalPrice.toFixed(2)}€</span>
                                         </div>
-                                        <div className="flex justify-between text-gray-500">
-                                            <span>Enviament</span>
-                                            <span className="text-green-600 font-medium">Gratuït</span>
-                                        </div>
-                                        <div className="h-px bg-gray-100"></div>
-                                        <div className="flex justify-between text-xl font-bold text-gray-900">
+                                        <div className="flex justify-between text-brand-dark text-xl font-black">
                                             <span>Total</span>
                                             <span>{totalPrice.toFixed(2)}€</span>
                                         </div>
                                     </div>
                                     <button
                                         onClick={() => navigate('/checkout')}
-                                        className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-blue-500/30 hover:bg-blue-700 transition-all transform hover:-translate-y-0.5 active:translate-y-0"
+                                        className="w-full bg-brand-dark text-white font-black py-5 rounded-2xl shadow-xl hover:bg-brand-blue transition-all flex items-center justify-center gap-3 group"
                                     >
-                                        Finalitzar Compra
+                                        <span>Check out ARA</span>
+                                        <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
                                     </button>
                                 </div>
                             )}
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
+
+            {/* Hero Section Redesigned */}
+            <div className="relative h-[90vh] flex items-center justify-center overflow-hidden bg-brand-dark">
+                <img
+                    src="https://images.unsplash.com/photo-1512436991641-6745cdb1723f?auto=format&fit=crop&w=1920&q=90"
+                    className="absolute inset-0 w-full h-full object-cover opacity-60"
+                    alt="Brand Hero"
+                />
+                <div className="absolute inset-0 bg-gradient-to-b from-brand-dark/60 via-transparent to-brand-dark/80" />
+
+                <div className="relative container mx-auto px-6 text-center">
+                    <motion.span
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="inline-block px-4 py-1 bg-brand-blue text-white text-[10px] font-black uppercase tracking-[0.3em] rounded-full mb-6"
+                    >
+                        Nova Col·lecció 2026
+                    </motion.span>
+                    <motion.h1
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.2 }}
+                        className="text-6xl md:text-8xl font-black text-white leading-none mb-8 tracking-tighter"
+                    >
+                        TRUE FACTS <br />
+                        <span className="text-brand-blue italic">URBAN WEAR.</span>
+                    </motion.h1>
+                    <motion.p
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.4 }}
+                        className="text-slate-200 text-lg md:text-xl max-w-2xl mx-auto mb-10 font-medium"
+                    >
+                        No només vestim cossos, expliquem fets. Descobreix la revolució del minimalisme urbà d'alta qualitat.
+                    </motion.p>
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: 0.6 }}
+                        className="flex flex-col sm:flex-row gap-4 justify-center"
+                    >
+                        <button className="px-10 py-5 bg-white text-brand-dark font-black rounded-2xl hover:bg-brand-blue hover:text-white transition-all shadow-2xl">
+                            Explora la Botiga
+                        </button>
+                    </motion.div>
+                </div>
+            </div>
+
+            {/* Feature Bar */}
+            <div className="bg-white border-y border-slate-100 py-10">
+                <div className="container mx-auto px-6 grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 bg-green-50 rounded-2xl text-green-600">
+                            <CheckCircle2 size={24} />
+                        </div>
+                        <div>
+                            <h4 className="font-bold text-brand-dark">Qualitat Certificada</h4>
+                            <p className="text-xs text-slate-500">Materials orgànics Premium</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 bg-blue-50 rounded-2xl text-blue-600">
+                            <CheckCircle2 size={24} />
+                        </div>
+                        <div>
+                            <h4 className="font-bold text-brand-dark">Enviament Exprés</h4>
+                            <p className="text-xs text-slate-500">24/48h a tot el territori</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 bg-indigo-50 rounded-2xl text-indigo-600">
+                            <CheckCircle2 size={24} />
+                        </div>
+                        <div>
+                            <h4 className="font-bold text-brand-dark">Suport Personalitzat</h4>
+                            <p className="text-xs text-slate-500">Contacte directe 24/7</p>
                         </div>
                     </div>
                 </div>
-            )}
-
-            {/* Hero Section */}
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white py-24 px-4 text-center">
-                <div className="max-w-4xl mx-auto">
-                    <h1 className="text-5xl md:text-6xl font-extrabold mb-6 leading-tight tracking-tight animate-fade-in-up">
-                        Benvinguts a la nostra botiga
-                    </h1>
-                    <p className="text-xl md:text-2xl mb-10 text-blue-100 max-w-2xl mx-auto font-light">
-                        Descobreix els millors productes al millor preu. Qualitat garantida en cada samarreta.
-                    </p>
-                    <button className="bg-white text-blue-600 font-bold py-3 px-8 rounded-full shadow-xl hover:shadow-2xl hover:scale-105 transition-all duration-300 text-lg">
-                        Veure Productes
-                    </button>
-                </div>
             </div>
 
-            {/* Featured Products Section */}
-            <div className="container mx-auto py-20 px-4">
-                <div className="flex items-center justify-between mb-12">
-                    <h2 className="text-3xl font-bold text-gray-900">Productes Destacats</h2>
-                    <div className="h-1 flex-1 bg-gray-200 ml-8 rounded-full"></div>
+            {/* Product Section */}
+            <div className="container mx-auto py-32 px-6">
+                <div className="flex items-end justify-between mb-16">
+                    <div>
+                        <h2 className="text-4xl md:text-5xl font-black text-brand-dark tracking-tighter mb-4 uppercase">Productes Destacats</h2>
+                        <div className="w-24 h-2 bg-brand-blue rounded-full" />
+                    </div>
+                    <Link to="#" className="text-sm font-black text-brand-blue border-b-2 border-brand-blue pb-1 hover:text-brand-dark hover:border-brand-dark transition-all">VEURE TOTS</Link>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-8">
-                    {products.map((product) => (
-                        <div key={product.id} className="bg-white rounded-2xl shadow-lg overflow-hidden group hover:shadow-2xl transition-all duration-300 border border-gray-100">
-                            <div className="h-64 overflow-hidden relative">
-                                <img
-                                    src={product.image}
-                                    alt={product.name}
-                                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                                />
-                                <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-10 transition-opacity duration-300"></div>
-                            </div>
-                            <div className="p-6">
-                                <h3 className="text-xl font-bold mb-2 text-gray-900 group-hover:text-blue-600 transition-colors">{product.name}</h3>
-                                <p className="text-gray-500 text-lg font-medium mb-6">{product.price.toFixed(2)}€</p>
-                                <button
-                                    onClick={() => addToCart(product)}
-                                    className="w-full bg-gray-900 text-white font-bold py-3 px-4 rounded-xl hover:bg-blue-600 transition-colors shadow-md flex items-center justify-center gap-2 active:scale-95 transform"
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-                                    </svg>
-                                    Afegir al Cistell
-                                </button>
-                            </div>
+                {isLoadingProducts ? (
+                    <div className="flex justify-center py-20">
+                        <Loader2 className="w-12 h-12 text-brand-blue animate-spin" />
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-12">
+                        {dbProducts.map((product, idx) => (
+                            <motion.div
+                                key={product._id}
+                                initial={{ opacity: 0, y: 20 }}
+                                whileInView={{ opacity: 1, y: 0 }}
+                                viewport={{ once: true }}
+                                transition={{ delay: idx * 0.1 }}
+                                className="group"
+                            >
+                                <div className="relative aspect-[3/4] bg-slate-200 rounded-[2.5rem] overflow-hidden mb-6 shadow-sm group-hover:shadow-2xl transition-all duration-500">
+                                    <img src={product.imatge} alt={product.nom} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                                    <div className="absolute inset-0 bg-brand-dark/20 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    <button
+                                        onClick={() => addToCart(product)}
+                                        className="absolute bottom-6 left-6 right-6 bg-white/90 backdrop-blur-md text-brand-dark font-black py-4 rounded-2xl translate-y-20 group-hover:translate-y-0 transition-transform duration-500 hover:bg-brand-blue hover:text-white"
+                                    >
+                                        AFEGIR A LA CISTELLA
+                                    </button>
+                                </div>
+                                <div className="flex justify-between items-start px-2">
+                                    <div>
+                                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1 block">{product.categoria}</span>
+                                        <h3 className="text-xl font-bold text-brand-dark group-hover:text-brand-blue transition-colors line-clamp-1">{product.nom}</h3>
+                                    </div>
+                                    <p className="text-lg font-black text-brand-dark">{product.preu.toFixed(2)}€</p>
+                                </div>
+                            </motion.div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            {/* Brand Footer */}
+            <footer className="bg-brand-dark text-white py-24 mt-20">
+                <div className="container mx-auto px-6 grid grid-cols-1 md:grid-cols-4 gap-12">
+                    <div className="col-span-1 md:col-span-2">
+                        <h2 className="text-4xl font-black mb-6">TRUE FACTS.</h2>
+                        <p className="text-slate-400 max-w-sm text-lg">La veritat es vesteix amb minimalisme. Fabricat amb passió per aquells que no segueixen les masses.</p>
+                    </div>
+                    <div>
+                        <h5 className="font-bold mb-6 text-slate-200">Enllaços</h5>
+                        <ul className="space-y-4 text-slate-400 text-sm">
+                            <li><a href="#" className="hover:text-white transition-colors">Politica de privadesa</a></li>
+                            <li><a href="#" className="hover:text-white transition-colors">Termes i condicions</a></li>
+                            <li><a href="#" className="hover:text-white transition-colors">Enviament i devolucions</a></li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h5 className="font-bold mb-6 text-slate-200">Subscriu-te</h5>
+                        <div className="relative">
+                            <input
+                                type="email"
+                                placeholder="La teva adreça"
+                                className="w-full bg-slate-800 border-none rounded-xl py-4 px-4 text-sm focus:ring-2 focus:ring-brand-blue outline-none"
+                            />
+                            <button className="absolute right-2 top-2 bg-brand-blue p-2 rounded-lg">
+                                <ArrowRight size={20} />
+                            </button>
                         </div>
-                    ))}
+                    </div>
                 </div>
-            </div>
-
-            {/* Footer */}
-            <footer className="bg-gray-900 text-gray-400 py-12">
-                <div className="container mx-auto px-4 text-center">
-                    <p>&copy; 2026 True Facts. Tots els drets reservats.</p>
+                <div className="container mx-auto px-6 mt-20 pt-10 border-t border-slate-800 text-center text-slate-500 text-xs">
+                    <p>&copy; {new Date().getFullYear()} TRUE FACTS CLOTHING. TOTS ELS DRETS RESERVATS.</p>
                 </div>
             </footer>
         </div>
