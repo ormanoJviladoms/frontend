@@ -20,7 +20,7 @@ export default function Login() {
         const result = await login(email, password);
 
         if (result.success) {
-            navigate('/');
+            navigate(result.user?.rol === 'admin' ? '/' : '/');
         } else {
             setError(result.message);
             setIsLoading(false);

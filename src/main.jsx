@@ -9,6 +9,10 @@ import Cart from './pages/Cart.jsx'
 import Checkout from './pages/Checkout.jsx'
 import CheckoutSuccess from './pages/CheckoutSuccess.jsx'
 import CheckoutCancel from './pages/CheckoutCancel.jsx'
+import UserDashboard from './pages/UserDashboard.jsx'
+import AdminDashboard from './pages/AdminDashboard.jsx'
+import Profile from './pages/Profile.jsx'
+import ProtectedRoute from './components/ProtectedRoute.jsx'
 import './index.css'
 
 import { AuthProvider } from './context/AuthContext.jsx'
@@ -26,11 +30,18 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="checkout" element={<Checkout />} />
             <Route path="checkout/success" element={<CheckoutSuccess />} />
             <Route path="checkout/cancel" element={<CheckoutCancel />} />
+            <Route element={<ProtectedRoute allowedRoles={['client', 'admin']} />}>
+              <Route path="profile" element={<Profile />} />
+            </Route>
+            <Route element={<ProtectedRoute allowedRoles={['client']} />}>
+              <Route path="dashboard" element={<UserDashboard />} />
+            </Route>
+            <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
+              <Route path="admin/dashboard" element={<AdminDashboard />} />
+            </Route>
           </Route>
         </Routes>
       </BrowserRouter>
     </AuthProvider>
   </React.StrictMode>,
 )
-
-

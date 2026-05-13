@@ -12,7 +12,11 @@ import {
     ArrowRight,
     Star,
     CheckCircle2,
-    Loader2
+    Loader2,
+    LayoutDashboard,
+    ShieldCheck,
+    PersonStanding,
+    User2
 } from 'lucide-react';
 
 export default function Home() {
@@ -125,7 +129,7 @@ export default function Home() {
             if (!currentComandaId) {
                 const orderRes = await fetch('/api/comandes', {
                     method: 'POST',
-                    headers: { 
+                    headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`
                     },
@@ -143,7 +147,7 @@ export default function Home() {
                 const newQuantity = existingItem.quantity + 1;
                 await fetch(`/api/detallscomanda/${existingItem.detallId}`, {
                     method: 'PUT',
-                    headers: { 
+                    headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`
                     },
@@ -153,7 +157,7 @@ export default function Home() {
             } else {
                 const detailRes = await fetch('/api/detallscomanda', {
                     method: 'POST',
-                    headers: { 
+                    headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`
                     },
@@ -183,7 +187,7 @@ export default function Home() {
     const removeFromCart = async (detallId) => {
         try {
             const token = localStorage.getItem('accessToken');
-            await fetch(`/api/detallscomanda/${detallId}`, { 
+            await fetch(`/api/detallscomanda/${detallId}`, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -205,7 +209,7 @@ export default function Home() {
                 const token = localStorage.getItem('accessToken');
                 await fetch(`/api/detallscomanda/${detallId}`, {
                     method: 'PUT',
-                    headers: { 
+                    headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`
                     },
@@ -263,6 +267,13 @@ export default function Home() {
 
                             <div className="flex items-center gap-4">
                                 <span className="text-sm font-bold text-slate-500 hidden lg:block">Hola, {user?.nom || 'Usuari'}</span>
+                                <button
+                                    onClick={() => navigate(user?.rol === 'admin' ? '/admin/dashboard' : '/dashboard')}
+                                    className="p-2 text-slate-700 hover:text-brand-blue transition-colors"
+                                    title={user?.rol === 'admin' ? 'Dashboard administrador' : 'Dashboard usuari'}
+                                >
+                                    {user?.rol === 'admin' ? <ShieldCheck className="w-6 h-6" /> : <User2 className="w-6 h-6" />}
+                                </button>
                                 <button
                                     onClick={logout}
                                     className="p-2 text-slate-700 hover:text-red-500 transition-colors"

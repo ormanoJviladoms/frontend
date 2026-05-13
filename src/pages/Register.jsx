@@ -41,7 +41,7 @@ export default function Register() {
         });
 
         if (result.success) {
-            navigate('/');
+            navigate('/dashboard');
         } else {
             setError(result.message);
             setIsLoading(false);

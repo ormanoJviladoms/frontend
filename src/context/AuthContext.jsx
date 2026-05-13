@@ -1,24 +1,28 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+/* eslint-disable react-refresh/only-export-components */
+import React, { createContext, useState, useContext } from 'react';
 import * as authService from '../api/auth';
 
 const AuthContext = createContext();
 
 export const useAuth = () => useContext(AuthContext);
 
-export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+const getStoredUser = () => {
+  const storedUser = localStorage.getItem('user');
+  const accessToken = localStorage.getItem('accessToken');
 
-  useEffect(() => {
-    // Intentem recuperar la sessió al carregar la pàgina
-    const storedUser = localStorage.getItem('user');
-    const accessToken = localStorage.getItem('accessToken');
-    
-    if (storedUser && accessToken) {
-      setUser(JSON.parse(storedUser));
-    }
-    setLoading(false);
-  }, []);
+  if (!storedUser || !accessToken) return null;
+
+  try {
+    return JSON.parse(storedUser);
+  } catch {
+    localStorage.removeItem('user');
+    return null;
+  }
+};
+
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(getStoredUser);
+  const [loading] = useState(false);
 
   const login = async (email, password) => {
     try {
@@ -29,10 +33,10 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem('user', JSON.stringify(user));
         localStorage.setItem('accessToken', accessToken);
         localStorage.setItem('refreshToken', refreshToken);
-        return { success: true };
+        return { success: true, user };
       }
       return { success: false, message: response.message };
-    } catch (error) {
+    } catch {
       return { success: false, message: 'Error de connexió amb el servidor' };
     }
   };
@@ -46,10 +50,10 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem('user', JSON.stringify(user));
         localStorage.setItem('accessToken', accessToken);
         localStorage.setItem('refreshToken', refreshToken);
-        return { success: true };
+        return { success: true, user };
       }
       return { success: false, message: response.message };
-    } catch (error) {
+    } catch {
       return { success: false, message: 'Error de connexió amb el servidor' };
     }
   };
@@ -67,8 +71,13 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('userEmail');
   };
 
+  const updateUser = (updatedUser) => {
+    setUser(updatedUser);
+    localStorage.setItem('user', JSON.stringify(updatedUser));
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );
