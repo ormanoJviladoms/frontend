@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
-import { loadStripe } from '@stripe/stripe-js';
 import {
     ChevronLeft,
     CreditCard,
@@ -13,8 +12,6 @@ import {
     ArrowRight,
     AlertCircle
 } from 'lucide-react';
-
-const stripePromise = loadStripe('pk_test_W7gM3Cn1H0eTHNx5Xd9E6eR2');
 
 export default function Checkout() {
     const navigate = useNavigate();

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
@@ -10,20 +10,9 @@ export default function Cart() {
     const navigate = useNavigate();
     const { user, loading: authLoading } = useAuth();
     const [cart, setCart] = useState([]);
-    const [comandaId, setComandaId] = useState(null);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        if (!authLoading && !user) {
-            navigate('/login');
-            return;
-        }
-        if (user) {
-            loadCart();
-        }
-    }, [user, authLoading, navigate]);
-
-    const loadCart = async () => {
+    const loadCart = useCallback(async () => {
         try {
             const token = localStorage.getItem('accessToken');
             const resProducts = await fetch('/api/products', {
@@ -44,7 +33,6 @@ export default function Cart() {
                 );
 
                 if (pendingComanda) {
-                    setComandaId(pendingComanda._id);
                     const resDetalls = await fetch('/api/detallscomanda', {
                         headers: { 'Authorization': `Bearer ${token}` }
                     });
@@ -75,7 +63,17 @@ export default function Cart() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [user]);
+
+    useEffect(() => {
+        if (!authLoading && !user) {
+            navigate('/login');
+            return;
+        }
+        if (user) {
+            loadCart();
+        }
+    }, [user, authLoading, navigate, loadCart]);
 
     const removeFromCart = async (detallId) => {
         try {
